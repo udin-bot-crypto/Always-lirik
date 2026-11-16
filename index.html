@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>typewriter-lirik</title>
+<style>
+  :root{
+    --bg:#050507; --putih:#d4d4d4; --abu:#6b7280; --nomor:#3a3f4b;
+    --pink:#e040c8; --cyan:#22d3ee; --lime:#b8e62e; --oranye:#ff9f43;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--putih);overflow:hidden;
+    -webkit-tap-highlight-color:transparent;user-select:none}
+  body{font-family:"Cascadia Code","Cascadia Mono",Consolas,"SF Mono",Menlo,"Courier New",monospace;
+    font-size:clamp(14px,4vw,22px);line-height:1.9;
+    background:radial-gradient(ellipse at 50% 40%,#0d0d14 0%,#050507 70%)}
+
+  /* tab ala VS Code */
+  #tab{position:fixed;top:0;left:0;right:0;height:calc(34px + env(safe-area-inset-top,0px));
+    padding-top:env(safe-area-inset-top,0px);background:#0a0a0f;border-bottom:1px solid #15151c;
+    display:flex;align-items:flex-end;font-size:11px;line-height:1;z-index:10}
+  #tab span{padding:9px 16px;background:var(--bg);color:#c9c9c9;border-top:2px solid var(--oranye)}
+  #tab i{color:var(--oranye);font-style:normal;margin-right:7px}
+  #tab b{color:#666;font-weight:400;margin-left:10px}
+
+  #layar{height:100%;overflow:hidden;display:flex;flex-direction:column;padding:56px 6vw 12vh 4vw}
+  #kode{margin:auto 0}
+
+  /* Efek transisi blur & pudar bertahap */
+  .l{
+    display:flex;
+    transition:filter .55s ease, opacity .55s ease, transform .55s ease;
+    will-change:filter, opacity;
+  }
+  .l.now{
+    opacity:1;
+    filter:blur(0px);
+  }
+  .l.now .c{text-shadow:0 0 14px rgba(184,230,46,.22)}
+
+  /* 1 baris sebelumnya: blur tipis */
+  .l.blur-1{
+    opacity:.62;
+    filter:blur(1.5px);
+  }
+
+  /* 2 baris sebelumnya: blur banget & pudar */
+  .l.blur-2{
+    opacity:.26;
+    filter:blur(4.5px);
+  }
+
+  /* 3 baris sebelumnya dst: ngeblur parah sambil ngilang */
+  .l.blur-3{
+    opacity:0;
+    filter:blur(9px);
+    pointer-events:none;
+  }
+
+  .n{flex:none;width:2.4em;margin-right:1.1em;text-align:right;color:var(--nomor)}
+  .l.now .n{color:#8b93a5}
+  .c{flex:1;white-space:pre-wrap;word-break:break-word;min-height:1.9em}
+  .o{color:var(--pink)} .m{color:var(--cyan)} .s{color:var(--lime)}
+  .b,.p{color:var(--oranye)} .k{color:var(--abu)}
+  .kursor{display:inline-block;width:.62em;height:1.15em;vertical-align:text-bottom;margin-left:2px;
+    background:#ff2a2a;border-radius:2px;box-shadow:0 0 12px #ff2a2aaa;animation:kedip 1s steps(1) infinite}
+  @keyframes kedip{50%{opacity:.15}}
+  #hint{position:fixed;right:6vw;bottom:calc(5vh + env(safe-area-inset-bottom,0px));
+    font-size:.6em;color:var(--abu);letter-spacing:.02em;opacity:0;transition:opacity .6s}
+  #hint.tampil{opacity:1}
+  #sync{position:fixed;left:0;right:0;top:calc(34px + env(safe-area-inset-top,0px));padding:10px 14px;font-size:.62em;
+    color:#0b0b0b;background:var(--lime);display:none;z-index:20}
+  #hasil{position:fixed;inset:0;background:#000d;display:none;padding:6vw;z-index:30}
+  #hasil textarea{width:100%;height:60%;background:#111;color:var(--lime);border:1px solid #333;
+    font:inherit;font-size:.7em;padding:10px;user-select:text}
+  #hasil p{font-size:.7em;color:var(--putih)}
+</style>
+</head>
+<body>
+<div id="tab"><span><i>&lt;&gt;</i>typewriter-lirik.html<b>×</b></span></div>
+<div id="layar"><div id="kode"></div></div>
+<div id="hint">ketuk layar untuk mulai</div>
+<div id="sync"></div>
+<div id="hasil"><p>Salin array ini ke <b>WAKTU</b> di file HTML:</p><textarea id="out" readonly></textarea></div>
+<audio id="lagu" src="audio.m4a" preload="auto"></audio>
+
+<script>
+/* =====================  EDIT BAGIAN INI  ===================== */
+
+const LIRIK = [
+  'Losing my head over youuuuuuuuuu',
+  'And ill be here',
+  'Cause we both know how it goes',
+  'I dont want things to change',
+  'I pray the stay the same, always',
+  'And i dont care if youre with somebody else',
+  'Ill give you time and space',
+  'Just know im not a phase',
+  'Im always-ways-ways',
+  '//ALWAYS, -Daniel Caesar-'
+];
+
+const WAKTU = [0.22, 7.96, 9.79, 12.52, 15.93, 22.16, 26.64, 29.90, 32.82, 34.50];
+
+const GESER       = 0;
+const KECEPATAN   = 0.11;
+const TELAT_KETUK = 0.15;
+
+/* ============================================================== */
+
+const GAYA = [
+  t => 'me.keep("' + t + '")',
+  t => '{ held: "' + t + '" }',
+  t => 'it.wont("' + t + '")',
+  t => '{ feel: "' + t + '" }',
+  t => 'me.say("' + t + '")',
+  t => '{ vibe: "' + t + '" }',
+  t => 'it.keep("' + t + '")'
+];
+
+const KODE = LIRIK.map((s, i) =>
+  (s.startsWith('//') || /^\s*(me|it)\./.test(s) || s.trim().startsWith('{'))
+    ? s : GAYA[i % GAYA.length](s.replace(/"/g, "'")));
+
+const lagu  = document.getElementById('lagu');
+const kode  = document.getElementById('kode');
+const layar = document.getElementById('layar');
+const hint  = document.getElementById('hint');
+const modeSync = location.search.includes('sync');
+
+let DUR = 35.4;
+let T = [];
+let status = 'siap';
+
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function warna(s){
+  let out = '', i = 0;
+  while(i < s.length){
+    const c = s[i];
+    if(s.startsWith('//', i)){ out += '<span class="k">' + esc(s.slice(i)) + '</span>'; break; }
+    if(c === '"'){
+      let j = s.indexOf('"', i + 1); j = (j === -1) ? s.length : j + 1;
+      out += '<span class="s">' + esc(s.slice(i, j)) + '</span>'; i = j; continue;
+    }
+    if(/[A-Za-z_]/.test(c)){
+      let j = i; while(j < s.length && /\w/.test(s[j])) j++;
+      const w = s.slice(i, j);
+      let cls = '';
+      if(w === 'me' || w === 'it') cls = 'o';
+      else if(s[i - 1] === '.') cls = 'm';
+      else if(s[j] === ':') cls = 'p';
+      out += cls ? '<span class="' + cls + '">' + w + '</span>' : w;
+      i = j; continue;
+    }
+    if('{}()'.includes(c)){ out += '<span class="b">' + c + '</span>'; i++; continue; }
+    out += esc(c); i++;
+  }
+  return out;
+}
+
+const BOBOT = KODE.map(s => {
+  const cum = [0];
+  for(let k = 0; k < s.length; k++){
+    const noise = Math.abs(Math.sin(k * 12.9898 + s.length * 78.233) * 43758.5453) % 1;
+    let w = 0.6 + noise * 1.0;
+    if(s[k - 1] === ',' ) w += 2.5;
+    else if(s[k - 1] === ' ') w += 0.5;
+    cum.push(cum[k] + w);
+  }
+  return cum;
+});
+function hurufKe(i, p){
+  const cum = BOBOT[i], target = p * cum[cum.length - 1];
+  let n = 0; while(n < cum.length - 1 && cum[n + 1] <= target) n++;
+  return n;
+}
+
+function hitungWaktu(){
+  const n = KODE.length;
+  const dasar = (WAKTU.length === n) ? WAKTU.slice() : KODE.map((_, i) => 0.6 + i * (DUR - 2) / n);
+  T = dasar.map(x => x + GESER);
+}
+
+const KURSOR = '<span class="kursor"></span>';
+
+function gambar(now){
+  const baris = [];
+  for(let i = 0; i < KODE.length; i++){
+    if(now < T[i]) break;
+    const teks = KODE[i];
+    const slot = (i + 1 < T.length ? T[i + 1] : DUR) - T[i];
+    const durKetik = Math.max(0.3, Math.min(slot - 0.2, teks.length * KECEPATAN));
+    const p = Math.min(1, (now - T[i]) / durKetik);
+    baris.push(warna(teks.slice(0, hurufKe(i, p))));
+  }
+  if(!baris.length) baris.push('');
+  baris[baris.length - 1] += KURSOR;
+  const akhir = baris.length - 1;
+
+  kode.innerHTML = baris.map((b, i) => {
+    const jarak = akhir - i;
+    let kelas = 'now';
+    if(jarak === 1) kelas = 'blur-1';
+    else if(jarak === 2) kelas = 'blur-2';
+    else if(jarak >= 3) kelas = 'blur-3';
+    return '<div class="l ' + kelas + '"><span class="n">' + (i + 1) + '</span><span class="c">' + b + '</span></div>';
+  }).join('');
+  layar.scrollTop = layar.scrollHeight;
+}
+
+function loop(){
+  gambar(status === 'selesai' ? DUR + 1 : lagu.currentTime);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- mode sinkron (?sync) ---------- */
+const bar = document.getElementById('sync');
+let tanda = [];
+function tampilSync(){
+  const i = tanda.length;
+  bar.style.display = 'block';
+  bar.textContent = i < KODE.length
+    ? 'SYNC ' + (i + 1) + '/' + KODE.length + ' - ketuk pas baris ini mulai: ' + LIRIK[i].slice(0, 40)
+    : 'Selesai, salin hasilnya';
+}
+function selesaiSync(){
+  document.getElementById('out').value =
+    '[' + tanda.map(x => Math.max(0, x - TELAT_KETUK).toFixed(2)).join(', ') + ']';
+  document.getElementById('hasil').style.display = 'block';
+}
+
+/* ---------- kontrol ---------- */
+function mulai(){
+  status = 'main';
+  hint.classList.remove('tampil');
+  lagu.currentTime = 0;
+  lagu.play().catch(() => { hint.textContent = 'audio.m4a ga kebaca, taruh satu folder sama file ini'; hint.classList.add('tampil'); });
+  if(modeSync){ tanda = []; tampilSync(); }
+}
+function ketuk(e){
+  if(e && e.target.closest('#hasil')) return;
+  if(status === 'siap' || status === 'selesai'){ mulai(); return; }
+  if(modeSync && status === 'main' && tanda.length < KODE.length){
+    tanda.push(lagu.currentTime); tampilSync();
+    if(tanda.length === KODE.length) selesaiSync();
+  }
+}
+
+lagu.addEventListener('loadedmetadata', () => { if(isFinite(lagu.duration)) DUR = lagu.duration; hitungWaktu(); });
+lagu.addEventListener('ended', () => {
+  if(modeSync && tanda.length < KODE.length) selesaiSync();
+  status = 'selesai';
+  hint.textContent = 'ketuk layar untuk mengulang';
+  hint.classList.add('tampil');
+});
+document.addEventListener('pointerdown', ketuk);
+document.addEventListener('keydown', e => { if(e.code === 'Space'){ e.preventDefault(); ketuk(); } });
+
+hitungWaktu();
+hint.classList.add('tampil');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
